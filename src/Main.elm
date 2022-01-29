@@ -1,46 +1,196 @@
-module Main exposing (Model, Msg, main)
+port module Main exposing (Model, Msg, main)
 
+import Array exposing (Array)
 import Browser
 import Html exposing (Html)
 import Html.Attributes as Attrs
-import Html.Events exposing (onClick)
+import Html.Events as Events
+
+
+port copy : String -> Cmd msg
+
+
+
+--- MODEL ---
+
+
+type alias Model =
+    { solution : String
+    , currentAttempt : Array Char
+    , numOfAttempts : Int
+    , state : Array (Array Tile)
+    , won : Bool
+    }
+
+
+init : () -> ( Model, Cmd msg )
+init _ =
+    ( { solution = "WITCH"
+      , currentAttempt = Array.initialize 5 (always ' ')
+      , numOfAttempts = 0
+      , state = Array.initialize 6 (always (Array.initialize 5 (always Empty)))
+      , won = False
+      }
+    , Cmd.none
+    )
+
+
+type Msg
+    = TypeChar Int Char
+    | CheckWord
+    | ShareResult
+
+
+type Tile
+    = Empty
+    | Incorrect Char
+    | Present Char
+    | Correct Char
+
+
+
+--- VIEW ---
+
+
+viewTile : Int -> Tile -> Html Msg
+viewTile position tile =
+    case tile of
+        Empty ->
+            let
+                strToChar : String -> Char
+                strToChar =
+                    String.toList
+                        >> List.head
+                        >> Maybe.withDefault ' '
+            in
+            Html.input
+                [ Events.onInput (TypeChar position << strToChar << String.toUpper)
+                , Attrs.class "w-8 uppercase text-center outline-none border border-gray-400"
+                ]
+                []
+
+        Incorrect char ->
+            Html.div [ Attrs.class "w-8 border border-gray-400 text-center text-white bg-slate-600" ]
+                [ Html.text <| String.fromChar char ]
+
+        Correct char ->
+            Html.div [ Attrs.class "w-8 border border-gray-400 text-center text-white bg-green-600" ]
+                [ Html.text <| String.fromChar char ]
+
+        Present char ->
+            Html.div [ Attrs.class "w-8 border border-gray-400 text-center text-white bg-yellow-500" ]
+                [ Html.text <| String.fromChar char ]
+
+
+view : Model -> Html Msg
+view { state, numOfAttempts, won } =
+    if numOfAttempts > 5 then
+        Html.div [ Attrs.class "h-full grid place-items-center" ] [ Html.text "Sorry, you lost! 😭" ]
+
+    else
+        Html.div [ Attrs.class "h-full grid place-items-center" ]
+            [ Html.div [ Attrs.class "w-50 grid grid-cols-5 gap-1" ]
+                (state
+                    |> Array.toList
+                    |> List.concatMap (Array.indexedMap viewTile >> Array.toList)
+                )
+            , if won then
+                Html.button
+                    [ Attrs.class "rounded bg-slate-400 p-2 text-white"
+                    , Events.onClick ShareResult
+                    ]
+                    [ Html.text "CONGRATS! 🎉 SHARE IT WITH THE WORLD!" ]
+
+              else
+                Html.button
+                    [ Attrs.class "rounded bg-slate-400 p-2 text-white"
+                    , Events.onClick CheckWord
+                    ]
+                    [ Html.text "ENTER" ]
+            ]
+
+
+tileToString : Tile -> String
+tileToString tile =
+    case tile of
+        Empty ->
+            "⬛"
+
+        Incorrect _ ->
+            "⬛"
+
+        Present _ ->
+            "🟨"
+
+        Correct _ ->
+            "🟩"
+
+
+
+--- UPDATE ---
+
+
+update : Msg -> Model -> ( Model, Cmd msg )
+update msg model =
+    case msg of
+        TypeChar position char ->
+            ( { model | currentAttempt = Array.set position char model.currentAttempt }, Cmd.none )
+
+        ShareResult ->
+            let
+                stateString =
+                    model.state
+                        |> Array.filter ((/=) (Array.fromList [ Empty, Empty, Empty, Empty, Empty ]))
+                        |> Array.map
+                            (Array.map tileToString
+                                >> Array.toList
+                                >> String.join ""
+                            )
+                        |> Array.toList
+                        |> String.join "\n"
+            in
+            ( model, copy stateString )
+
+        CheckWord ->
+            let
+                solutionArray : Array Char
+                solutionArray =
+                    model.solution
+                        |> String.toList
+                        |> Array.fromList
+
+                newState =
+                    model.currentAttempt
+                        |> Array.indexedMap
+                            (\index char ->
+                                if Just char == Array.get index solutionArray then
+                                    Correct char
+
+                                else if String.contains (String.fromChar char) model.solution then
+                                    Present char
+
+                                else
+                                    Incorrect char
+                            )
+            in
+            ( { model
+                | state = Array.set model.numOfAttempts newState model.state
+                , numOfAttempts = model.numOfAttempts + 1
+                , won = solutionArray == model.currentAttempt
+              }
+            , Cmd.none
+            )
+
+
+
+--- MAIN ---
 
 
 main : Program () Model Msg
 main =
-    Browser.sandbox { init = init, update = update, view = view }
-
-
-type alias Model =
-    Int
-
-
-init : Model
-init =
-    0
-
-
-type Msg
-    = Increment
-    | Decrement
-
-
-update : Msg -> Model -> Model
-update msg model =
-    case msg of
-        Increment ->
-            model + 1
-
-        Decrement ->
-            model - 1
-
-
-view : Model -> Html Msg
-view model =
-    Html.div [ Attrs.class "h-full grid place-items-center" ]
-        [ Html.div [ Attrs.class "flex flex-row gap-2" ]
-            [ Html.button [ onClick Decrement ] [ Html.text "-" ]
-            , Html.div [] [ Html.text <| String.fromInt model ]
-            , Html.button [ onClick Increment ] [ Html.text "+" ]
-            ]
-        ]
+    Browser.element
+        { init = init
+        , update = update
+        , view = view
+        , subscriptions = always Sub.none
+        }
