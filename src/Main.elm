@@ -1,10 +1,19 @@
-port module Main exposing (Model, Msg, main)
+port module Main exposing (Model, main, update, view)
 
-import Array exposing (Array)
 import Browser
 import Html exposing (Html)
 import Html.Attributes as Attrs
 import Html.Events as Events
+import Katakana
+import List.Extra as List
+import Set exposing (Set)
+
+
+
+-- TODO: When word is not in Katakana dictionary -> add "shake" className
+-- TODO: Get diff between today and N day and use that as index for day word (getAt + cycle)
+-- TODO: Turn guesses into shared String
+-- TODO: Add Google Analytics!
 
 
 port copy : String -> Cmd msg
@@ -15,171 +24,429 @@ port copy : String -> Cmd msg
 
 
 type alias Model =
-    { solution : String
-    , currentAttempt : Array Char
-    , numOfAttempts : Int
-    , state : Array (Array Tile)
-    , won : Bool
+    { nextGuess : String
+    , guesses : List String
+    , word : String
     }
+
+
+type Msg
+    = AddChar Char
+    | DeleteChar
+    | EnterGuess
+    | Share
+
+
+hardcodedWord : String
+hardcodedWord =
+    "WORLD"
 
 
 init : () -> ( Model, Cmd msg )
 init _ =
-    ( { solution = "WITCH"
-      , currentAttempt = Array.initialize 5 (always ' ')
-      , numOfAttempts = 0
-      , state = Array.initialize 6 (always (Array.initialize 5 (always Empty)))
-      , won = False
+    ( { guesses = []
+      , nextGuess = ""
+      , word = hardcodedWord
       }
     , Cmd.none
     )
-
-
-type Msg
-    = TypeChar Int Char
-    | CheckWord
-    | ShareResult
-
-
-type Tile
-    = Empty
-    | Incorrect Char
-    | Present Char
-    | Correct Char
 
 
 
 --- VIEW ---
 
 
-viewTile : Int -> Tile -> Html Msg
-viewTile position tile =
-    case tile of
-        Empty ->
-            let
-                strToChar : String -> Char
-                strToChar =
-                    String.toList
-                        >> List.head
-                        >> Maybe.withDefault ' '
-            in
-            Html.input
-                [ Events.onInput (TypeChar position << strToChar << String.toUpper)
-                , Attrs.class "w-8 uppercase text-center outline-none border border-gray-400"
-                ]
-                []
-
-        Incorrect char ->
-            Html.div [ Attrs.class "w-8 border border-gray-400 text-center text-white bg-slate-600" ]
-                [ Html.text <| String.fromChar char ]
-
-        Correct char ->
-            Html.div [ Attrs.class "w-8 border border-gray-400 text-center text-white bg-green-600" ]
-                [ Html.text <| String.fromChar char ]
-
-        Present char ->
-            Html.div [ Attrs.class "w-8 border border-gray-400 text-center text-white bg-yellow-500" ]
-                [ Html.text <| String.fromChar char ]
-
-
 view : Model -> Html Msg
-view { state, numOfAttempts, won } =
-    if numOfAttempts > 5 then
-        Html.div [ Attrs.class "h-full grid place-items-center" ] [ Html.text "Sorry, you lost! 😭" ]
+view model =
+    Html.div [ Attrs.class "p-8 flex flex-col gap-8 items-center" ]
+        [ Html.h1 [ Attrs.class "font-['Kashima'] text-5xl" ]
+            [ Html.text "Katakana Wordle! 👺" ]
+        , viewWordle
+            { word = model.word
+            , guesses = model.guesses
+            , nextGuess = model.nextGuess
+            }
+        , viewWin model.word model.guesses
+        , viewKeyboard model.word model.guesses
+        ]
 
-    else
-        Html.div [ Attrs.class "h-full grid place-items-center" ]
-            [ Html.div [ Attrs.class "w-50 grid grid-cols-5 gap-1" ]
-                (state
-                    |> Array.toList
-                    |> List.concatMap (Array.indexedMap viewTile >> Array.toList)
-                )
-            , if won then
-                Html.button
-                    [ Attrs.class "rounded bg-slate-400 p-2 text-white"
-                    , Events.onClick ShareResult
+
+viewWin : String -> List String -> Html Msg
+viewWin word guesses =
+    case gameState word guesses of
+        Won ->
+            Html.div
+                [ Attrs.class "text-xl text-lime-600" ]
+                [ Html.text "YOU WON! 🎉"
+                , Html.button
+                    [ Attrs.class "p-2 min-w-[2rem] text-center cursor-pointer text-xl border border-gray-500 text-gray-500"
+                    , Events.onClick Share
                     ]
-                    [ Html.text "CONGRATS! 🎉 SHARE IT WITH THE WORLD!" ]
+                    [ Html.text "SHARE! (Copy to 📋)" ]
+                ]
+
+        Lost ->
+            Html.div
+                [ Attrs.class "text-xl text-orange-600" ]
+                [ Html.text "YOU LOST! 😭" ]
+
+        Playing ->
+            Html.text ""
+
+
+type Key
+    = CharKey Char
+    | DeleteKey
+    | EnterGuessKey
+
+
+viewKeyboard : String -> List String -> Html Msg
+viewKeyboard word guesses =
+    Html.div
+        [ Attrs.class "flex flex-col gap-2 justify-stretch w-min" ]
+        (List.map (viewKeyboardRow word guesses) keyboard)
+
+
+viewKeyboardRow : String -> List String -> List Key -> Html Msg
+viewKeyboardRow word guesses keys =
+    Html.div
+        [ Attrs.class "flex flex-row gap-2 justify-center" ]
+        (List.map (viewKey word guesses) keys)
+
+
+viewKey : String -> List String -> Key -> Html Msg
+viewKey word guesses key =
+    let
+        ( msg, text, maybeClass ) =
+            case key of
+                CharKey char ->
+                    ( AddChar char
+                    , String.fromChar char
+                    , scoreKeyboardChar word guesses char
+                        |> Maybe.map gradeClass
+                    )
+
+                DeleteKey ->
+                    ( DeleteChar, "⬅", Nothing )
+
+                EnterGuessKey ->
+                    ( EnterGuess, "ENTER", Nothing )
+    in
+    Html.div
+        [ Events.onClick msg
+        , Attrs.class "p-2 min-w-[2rem] text-center cursor-pointer text-xl border border-gray-500 text-gray-500"
+        , maybeClass
+            |> Maybe.withDefault ""
+            |> Attrs.class
+        ]
+        [ Html.text text ]
+
+
+toCharKeys : String -> List Key
+toCharKeys keys =
+    keys
+        |> String.toList
+        |> List.map CharKey
+
+
+keyboard : List (List Key)
+keyboard =
+    [ toCharKeys "ァアィイゥウェエォオヮワカガキギク"
+    , toCharKeys "グケゲコゴサザシジスズセゼソゾタ"
+    , toCharKeys "ダチヂッツヅテデトドナニヌネノハ"
+    , toCharKeys "バパヒビピフブプヘベペホボポマミ"
+    , EnterGuessKey :: toCharKeys "ムメモャヤュユョヨラリルレロ" ++ [ DeleteKey ]
+    ]
+
+
+wordSize : Int
+wordSize =
+    5
+
+
+maxGuesses : Int
+maxGuesses =
+    6
+
+
+viewWordle :
+    { word : String
+    , guesses : List String
+    , nextGuess : String
+    }
+    -> Html msg
+viewWordle { word, guesses, nextGuess } =
+    let
+        scoredGuesses : List (List ( Char, Grade ))
+        scoredGuesses =
+            scoreGuesses word guesses
+
+        unusedGuesses : Int
+        unusedGuesses =
+            max 0 <|
+                maxGuesses
+                    - List.length guesses
+                    - (if String.isEmpty nextGuess then
+                        0
+
+                       else
+                        1
+                      )
+    in
+    Html.div [ Attrs.class "flex flex-col gap-2" ]
+        (List.map viewScoredGuess scoredGuesses
+            ++ (if String.isEmpty nextGuess then
+                    []
+
+                else
+                    [ viewNextGuess nextGuess ]
+               )
+            ++ List.repeat unusedGuesses emptyRow
+        )
+
+
+viewNextGuess : String -> Html msg
+viewNextGuess guess =
+    let
+        sanitizedGuess : String
+        sanitizedGuess =
+            String.left wordSize guess
+
+        padding : Int
+        padding =
+            wordSize - String.length sanitizedGuess
+    in
+    Html.div [ Attrs.class rowClasses ]
+        ((sanitizedGuess
+            |> String.toList
+            |> List.map viewNextGuessChar
+         )
+            ++ List.repeat padding emptyCell
+        )
+
+
+viewScoredGuess : List ( Char, Grade ) -> Html msg
+viewScoredGuess chars =
+    Html.div [ Attrs.class rowClasses ] (List.map viewScoredChar chars)
+
+
+emptyRow : Html msg
+emptyRow =
+    Html.div [ Attrs.class rowClasses ] (List.repeat wordSize emptyCell)
+
+
+rowClasses : String
+rowClasses =
+    "gap-2 flex flex-row"
+
+
+viewScoredChar : ( Char, Grade ) -> Html msg
+viewScoredChar ( char, grade ) =
+    Html.div
+        [ Attrs.class cellClasses
+        , Attrs.class "text-white"
+        , Attrs.class <| gradeClass grade
+        ]
+        [ Html.text <| String.fromChar char ]
+
+
+gradeClass : Grade -> String
+gradeClass grade =
+    case grade of
+        Miss ->
+            "bg-gray-400"
+
+        PresentElsewhere ->
+            "bg-yellow-500"
+
+        Hit ->
+            "bg-lime-500"
+
+
+emptyCell : Html msg
+emptyCell =
+    Html.div [ Attrs.class cellClasses ] []
+
+
+viewNextGuessChar : Char -> Html msg
+viewNextGuessChar char =
+    Html.div [ Attrs.class cellClasses ] [ Html.text <| String.fromChar char ]
+
+
+cellClasses : String
+cellClasses =
+    "w-[58px] h-[58px] border border-gray-400 text-gray-600 text-xl flex items-center justify-center"
+
+
+scoreGuesses : String -> List String -> List (List ( Char, Grade ))
+scoreGuesses word guesses =
+    guesses
+        |> List.map
+            (String.left wordSize
+                >> String.toUpper
+                >> String.toList
+                >> scoreGuess word
+            )
+
+
+scoreGuess : String -> List Char -> List ( Char, Grade )
+scoreGuess word guessChars =
+    let
+        wordChars : List Char
+        wordChars =
+            String.toList word
+
+        wordSet : Set Char
+        wordSet =
+            Set.fromList wordChars
+    in
+    List.map2
+        (\correctChar guessChar ->
+            ( guessChar
+            , if correctChar == guessChar then
+                Hit
+
+              else if Set.member guessChar wordSet then
+                PresentElsewhere
 
               else
-                Html.button
-                    [ Attrs.class "rounded bg-slate-400 p-2 text-white"
-                    , Events.onClick CheckWord
-                    ]
-                    [ Html.text "ENTER" ]
-            ]
+                Miss
+            )
+        )
+        wordChars
+        guessChars
 
 
-tileToString : Tile -> String
-tileToString tile =
-    case tile of
-        Empty ->
-            "⬛"
+{-| Nothing == not guessed yet, white
+-}
+scoreKeyboardChar : String -> List String -> Char -> Maybe Grade
+scoreKeyboardChar word guesses char =
+    let
+        guessedChars : Set Char
+        guessedChars =
+            -- grey unless proven otherwise
+            guesses
+                |> List.concatMap String.toList
+                |> Set.fromList
 
-        Incorrect _ ->
-            "⬛"
+        correctChars : Set Char
+        correctChars =
+            word
+                |> String.toList
+                |> Set.fromList
 
-        Present _ ->
-            "🟨"
+        hitElsewhereChars : Set Char
+        hitElsewhereChars =
+            scoreGuesses word guesses
+                |> List.concat
+                |> List.filter (\( _, grade ) -> grade == PresentElsewhere)
+                |> List.map Tuple.first
+                |> Set.fromList
 
-        Correct _ ->
-            "🟩"
+        hitChars : Set Char
+        hitChars =
+            -- green
+            Set.intersect
+                guessedChars
+                correctChars
+    in
+    if Set.member char hitChars then
+        Just Hit
+
+    else if Set.member char hitElsewhereChars then
+        Just PresentElsewhere
+
+    else if Set.member char guessedChars then
+        Just Miss
+
+    else
+        Nothing
+
+
+type Grade
+    = Miss -- grey
+    | PresentElsewhere -- yellow
+    | Hit -- green
+
+
+type GameState
+    = Won
+    | Lost
+    | Playing
+
+
+gameState : String -> List String -> GameState
+gameState word guesses =
+    if List.member word guesses then
+        Won
+
+    else if List.length guesses >= maxGuesses then
+        Lost
+
+    else
+        Playing
 
 
 
---- UPDATE ---
+--- UDPATE ---
 
 
 update : Msg -> Model -> ( Model, Cmd msg )
 update msg model =
     case msg of
-        TypeChar position char ->
-            ( { model | currentAttempt = Array.set position char model.currentAttempt }, Cmd.none )
+        AddChar char ->
+            ( if gameState model.word model.guesses /= Playing then
+                model
 
-        ShareResult ->
-            let
-                stateString =
-                    model.state
-                        |> Array.filter ((/=) (Array.fromList [ Empty, Empty, Empty, Empty, Empty ]))
-                        |> Array.map
-                            (Array.map tileToString
-                                >> Array.toList
-                                >> String.join ""
-                            )
-                        |> Array.toList
-                        |> String.join "\n"
-            in
-            ( model, copy stateString )
+              else
+                { model
+                    | nextGuess =
+                        (model.nextGuess ++ String.fromChar char)
+                            |> String.left wordSize
+                }
+            , Cmd.none
+            )
 
-        CheckWord ->
-            let
-                solutionArray : Array Char
-                solutionArray =
-                    model.solution
-                        |> String.toList
-                        |> Array.fromList
-
-                newState =
-                    model.currentAttempt
-                        |> Array.indexedMap
-                            (\index char ->
-                                if Just char == Array.get index solutionArray then
-                                    Correct char
-
-                                else if String.contains (String.fromChar char) model.solution then
-                                    Present char
-
-                                else
-                                    Incorrect char
-                            )
-            in
+        DeleteChar ->
             ( { model
-                | state = Array.set model.numOfAttempts newState model.state
-                , numOfAttempts = model.numOfAttempts + 1
-                , won = solutionArray == model.currentAttempt
+                | nextGuess =
+                    model.nextGuess
+                        |> String.left (String.length model.nextGuess - 1)
               }
             , Cmd.none
             )
+
+        EnterGuess ->
+            ( if String.length model.nextGuess /= wordSize then
+                model
+
+              else if List.length model.guesses >= maxGuesses then
+                model
+
+              else
+                { model
+                    | nextGuess = ""
+                    , guesses = model.guesses ++ [ model.nextGuess ]
+                }
+            , Cmd.none
+            )
+
+        Share ->
+            let
+                stateString =
+                    "TODO:"
+
+                -- model.state
+                --     |> Array.filter ((/=) (Array.fromList [ Empty, Empty, Empty, Empty, Empty ]))
+                --     |> Array.map
+                --         (Array.map tileToString
+                --             >> Array.toList
+                --             >> String.join ""
+                --         )
+                --     |> Array.toList
+                --     |> String.join "\n"
+            in
+            ( model, copy stateString )
 
 
 

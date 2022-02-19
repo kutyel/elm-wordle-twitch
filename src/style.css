@@ -2,4 +2,24 @@
 @tailwind components;
 @tailwind utilities;
 
-body { height: 100vh; }
+@font-face {
+  font-family: Kashima;
+  src: url(../assets/Kashima.otf);
+}
+
+body { 
+  height: 100vh;
+}
+
+.shake {
+  animation: .8s shake infinite alternate;
+}
+
+@keyframes shake {
+  0% { transform: skewX(-15deg); }
+  5% { transform: skewX(15deg); }
+  10% { transform: skewX(-15deg); }
+  15% { transform: skewX(15deg); }
+  20% { transform: skewX(0deg); }
+  100% { transform: skewX(0deg); }  
+}
