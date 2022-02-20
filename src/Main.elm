@@ -12,10 +12,6 @@ import Task
 import Time exposing (Month(..))
 
 
-
--- TODO: Add Google Analytics!
-
-
 port copy : String -> Cmd msg
 
 
