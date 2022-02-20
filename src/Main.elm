@@ -14,7 +14,6 @@ import Time exposing (Month(..))
 
 
 -- TODO: When word is not in Katakana dictionary -> add "shake" className
--- TODO: Turn guesses into shared String
 -- TODO: Add Google Analytics!
 
 
@@ -451,20 +450,33 @@ update msg model =
 
         Share ->
             let
+                stateString : String
                 stateString =
-                    "TODO:"
-
-                -- model.state
-                --     |> Array.filter ((/=) (Array.fromList [ Empty, Empty, Empty, Empty, Empty ]))
-                --     |> Array.map
-                --         (Array.map tileToString
-                --             >> Array.toList
-                --             >> String.join ""
-                --         )
-                --     |> Array.toList
-                --     |> String.join "\n"
+                    model.guesses
+                        |> List.map
+                            (String.toList
+                                >> List.map (scoreKeyboardChar model.word model.guesses >> gradeToString)
+                                >> String.join ""
+                            )
+                        |> String.join "\n"
             in
             ( model, copy stateString )
+
+
+gradeToString : Maybe Grade -> String
+gradeToString grade =
+    case grade of
+        Nothing ->
+            "⬜️"
+
+        Just Miss ->
+            "⬜️"
+
+        Just PresentElsewhere ->
+            "🟨"
+
+        Just Hit ->
+            "🟩"
 
 
 
