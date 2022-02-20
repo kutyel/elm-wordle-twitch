@@ -1,17 +1,19 @@
 port module Main exposing (Model, main, update, view)
 
 import Browser
+import Date exposing (Date, Unit(..))
 import Html exposing (Html)
 import Html.Attributes as Attrs
 import Html.Events as Events
 import Katakana
 import List.Extra as List
 import Set exposing (Set)
+import Task
+import Time exposing (Month(..))
 
 
 
 -- TODO: When word is not in Katakana dictionary -> add "shake" className
--- TODO: Get diff between today and N day and use that as index for day word (getAt + cycle)
 -- TODO: Turn guesses into shared String
 -- TODO: Add Google Analytics!
 
@@ -35,20 +37,16 @@ type Msg
     | DeleteChar
     | EnterGuess
     | Share
+    | GetWordForToday Date
 
 
-hardcodedWord : String
-hardcodedWord =
-    "WORLD"
-
-
-init : () -> ( Model, Cmd msg )
+init : () -> ( Model, Cmd Msg )
 init _ =
     ( { guesses = []
       , nextGuess = ""
-      , word = hardcodedWord
+      , word = ""
       }
-    , Cmd.none
+    , Date.today |> Task.perform GetWordForToday
     )
 
 
@@ -154,7 +152,7 @@ keyboard =
     [ toCharKeys "ァアィイゥウェエォオヮワカガキギク"
     , toCharKeys "グケゲコゴサザシジスズセゼソゾタ"
     , toCharKeys "ダチヂッツヅテデトドナニヌネノハ"
-    , toCharKeys "バパヒビピフブプヘベペホボポマミ"
+    , toCharKeys "バパヒビピフブプヘベペホボポマミー"
     , EnterGuessKey :: toCharKeys "ムメモャヤュユョヨラリルレロ" ++ [ DeleteKey ]
     ]
 
@@ -166,7 +164,7 @@ wordSize =
 
 maxGuesses : Int
 maxGuesses =
-    6
+    10
 
 
 viewWordle :
@@ -394,6 +392,26 @@ gameState word guesses =
 update : Msg -> Model -> ( Model, Cmd msg )
 update msg model =
     case msg of
+        GetWordForToday today ->
+            let
+                firstDay : Date
+                firstDay =
+                    Date.fromCalendarDate 2022 Feb 20
+
+                diffDays : Int
+                diffDays =
+                    Date.diff Days firstDay today
+            in
+            ( { model
+                | word =
+                    -- Make sure that we never run out of words!
+                    List.cycle (diffDays + 1) Katakana.words
+                        |> List.getAt diffDays
+                        |> Maybe.withDefault ""
+              }
+            , Cmd.none
+            )
+
         AddChar char ->
             ( if gameState model.word model.guesses /= Playing then
                 model
