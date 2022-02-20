@@ -53,7 +53,7 @@ init _ =
 view : Model -> Html Msg
 view model =
     Html.div [ Attrs.class "p-8 flex flex-col gap-8 items-center" ]
-        [ Html.h1 [ Attrs.class "font-['Kashima'] text-5xl" ]
+        [ Html.h1 [ Attrs.class "font-['Kashima'] text-4xl" ]
             [ Html.text "Katakana Wordle! 👺" ]
         , viewWordle
             { word = model.word
@@ -146,11 +146,16 @@ toCharKeys keys =
 
 keyboard : List (List Key)
 keyboard =
-    [ toCharKeys "ァアィイゥウェエォオヮワカガキギク"
-    , toCharKeys "グケゲコゴサザシジスズセゼソゾタ"
-    , toCharKeys "ダチヂッツヅテデトドナニヌネンノハ"
-    , toCharKeys "バパヒビピフブプヘベペホボポマミー"
-    , EnterGuessKey :: toCharKeys "ムメモャヤュユョヨラリルレロ" ++ [ DeleteKey ]
+    [ toCharKeys "ァアィイゥウェエォ"
+    , toCharKeys "オヮワカガキギクグ"
+    , toCharKeys "ケゲコゴサザシジス"
+    , toCharKeys "ズセゼソゾタダチヂ"
+    , toCharKeys "ッツヅテデトドナニ"
+    , toCharKeys "ヌネンノハバパヒビ"
+    , toCharKeys "ピフブプヘベペホボ"
+    , toCharKeys "ポマミームメモャヤ"
+    , toCharKeys "ュユョヨラリルレロ"
+    , [ EnterGuessKey, DeleteKey ]
     ]
 
 
