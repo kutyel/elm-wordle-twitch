@@ -469,9 +469,8 @@ update msg model =
                                 >> String.join ""
                             )
                         |> String.join "\n"
-                        |> (++) "\n #KatakanaWordle"
             in
-            ( model, copy stateString )
+            ( model, copy <| stateString ++ "\n\n #KatakanaWordle \nhttps://katakana-wordle.netlify.app/" )
 
 
 gradeToString : Maybe Grade -> String
