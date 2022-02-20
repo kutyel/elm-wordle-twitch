@@ -13,7 +13,6 @@ import Time exposing (Month(..))
 
 
 
--- TODO: When word is not in Katakana dictionary -> add "shake" className
 -- TODO: Add Google Analytics!
 
 
@@ -28,6 +27,7 @@ type alias Model =
     { nextGuess : String
     , guesses : List String
     , word : String
+    , wordDoesNotExist : Bool
     }
 
 
@@ -44,6 +44,7 @@ init _ =
     ( { guesses = []
       , nextGuess = ""
       , word = ""
+      , wordDoesNotExist = False
       }
     , Date.today |> Task.perform GetWordForToday
     )
@@ -62,6 +63,7 @@ view model =
             { word = model.word
             , guesses = model.guesses
             , nextGuess = model.nextGuess
+            , wordDoesNotExist = model.wordDoesNotExist
             }
         , viewWin model.word model.guesses
         , viewKeyboard model.word model.guesses
@@ -76,10 +78,10 @@ viewWin word guesses =
                 [ Attrs.class "text-xl text-lime-600" ]
                 [ Html.text "YOU WON! 🎉"
                 , Html.button
-                    [ Attrs.class "p-2 min-w-[2rem] text-center cursor-pointer text-xl border border-gray-500 text-gray-500"
+                    [ Attrs.class "p-2 min-w-[2rem] ml-2 text-center cursor-pointer text-xl border border-gray-500 text-gray-500"
                     , Events.onClick Share
                     ]
-                    [ Html.text "SHARE! (Copy to 📋)" ]
+                    [ Html.text "SHARE! (COPY TO 📋)" ]
                 ]
 
         Lost ->
@@ -150,7 +152,7 @@ keyboard : List (List Key)
 keyboard =
     [ toCharKeys "ァアィイゥウェエォオヮワカガキギク"
     , toCharKeys "グケゲコゴサザシジスズセゼソゾタ"
-    , toCharKeys "ダチヂッツヅテデトドナニヌネノハ"
+    , toCharKeys "ダチヂッツヅテデトドナニヌネンノハ"
     , toCharKeys "バパヒビピフブプヘベペホボポマミー"
     , EnterGuessKey :: toCharKeys "ムメモャヤュユョヨラリルレロ" ++ [ DeleteKey ]
     ]
@@ -166,13 +168,8 @@ maxGuesses =
     10
 
 
-viewWordle :
-    { word : String
-    , guesses : List String
-    , nextGuess : String
-    }
-    -> Html msg
-viewWordle { word, guesses, nextGuess } =
+viewWordle : Model -> Html msg
+viewWordle { word, guesses, nextGuess, wordDoesNotExist } =
     let
         scoredGuesses : List (List ( Char, Grade ))
         scoredGuesses =
@@ -196,14 +193,14 @@ viewWordle { word, guesses, nextGuess } =
                     []
 
                 else
-                    [ viewNextGuess nextGuess ]
+                    [ viewNextGuess nextGuess wordDoesNotExist ]
                )
             ++ List.repeat unusedGuesses emptyRow
         )
 
 
-viewNextGuess : String -> Html msg
-viewNextGuess guess =
+viewNextGuess : String -> Bool -> Html msg
+viewNextGuess guess wordDoesNotExist =
     let
         sanitizedGuess : String
         sanitizedGuess =
@@ -212,8 +209,16 @@ viewNextGuess guess =
         padding : Int
         padding =
             wordSize - String.length sanitizedGuess
+
+        className : String
+        className =
+            if wordDoesNotExist then
+                "shake " ++ rowClasses
+
+            else
+                rowClasses
     in
-    Html.div [ Attrs.class rowClasses ]
+    Html.div [ Attrs.class className ]
         ((sanitizedGuess
             |> String.toList
             |> List.map viewNextGuessChar
@@ -429,6 +434,7 @@ update msg model =
                 | nextGuess =
                     model.nextGuess
                         |> String.left (String.length model.nextGuess - 1)
+                , wordDoesNotExist = False
               }
             , Cmd.none
             )
@@ -439,6 +445,9 @@ update msg model =
 
               else if List.length model.guesses >= maxGuesses then
                 model
+
+              else if List.notMember model.nextGuess Katakana.words then
+                { model | wordDoesNotExist = True }
 
               else
                 { model
@@ -459,6 +468,7 @@ update msg model =
                                 >> String.join ""
                             )
                         |> String.join "\n"
+                        |> (++) "\n #KatakanaWordle"
             in
             ( model, copy stateString )
 
