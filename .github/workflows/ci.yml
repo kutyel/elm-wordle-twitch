@@ -35,21 +35,6 @@ jobs:
           path: ~/.elm
           key: elm-${{ hashFiles('elm.json', 'elm-tooling.json', 'review/elm.json') }}
 
-      # Install npm packages, unless we restored them from cache.
-      # 1. Installs everything in yarn.lock.
-      # 2. Checks that package.json and yarn.lock are in sync.
-      # That’s why the cache depends on both yarn.lock and package.json.
-      - name: yarn ci
-        if: steps.cache-node_modules.outputs.cache-hit != 'true'
-        env:
-          # If you have a `"postinstall": "elm-tooling install"` script in your
-          # package.json, this turns it into a no-op. We’ll run it in the next
-          # step because of the caching. If elm-tooling.json changes but
-          # yarn.lock does not, the postinstall script needs running
-          # but this step won’t.
-          NO_ELM_TOOLING_INSTALL: 1
-        run: yarn install --immutable --immutable-cache --check-cache
-
       # Install tools from elm-tooling.json, unless we restored them from
       # cache. yarn.lock and elm-tooling.json can change independently,
       # so we need to install separately based on what was restored from cache.
@@ -57,8 +42,8 @@ jobs:
       # node_modules/.bin/ contains links to all your tools. `elm-tooling
       # install` runs very fast when there’s nothing new to download so
       # skipping the step doesn’t save much time.
-      - name: elm-tooling install
-        run: npx --no-install elm-tooling install
+      - name: yarn ci install
+        run: yarn install --immutable --immutable-cache --check-cache
 
       - name: elm make
         run: npx --no-install elm make src/Main.elm --output=/dev/null
