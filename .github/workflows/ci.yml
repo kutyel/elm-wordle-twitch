@@ -18,13 +18,13 @@ jobs:
           node-version: ${{ env.NVMRC }}
           cache: yarn
 
-      # Re-use node_modules between runs until package.json or package-lock.json changes.
+      # Re-use node_modules between runs until package.json or yarn.lock changes.
       - name: Cache node_modules
         id: cache-node_modules
         uses: actions/cache@v2
         with:
           path: node_modules
-          key: node_modules-${{ hashFiles('package.json', 'package-lock.json') }}
+          key: node_modules-${{ hashFiles('package.json', 'yarn.lock') }}
 
       # Re-use ~/.elm between runs until elm.json, elm-tooling.json or
       # review/elm.json changes. The Elm compiler saves downloaded Elm packages
@@ -45,13 +45,13 @@ jobs:
           # If you have a `"postinstall": "elm-tooling install"` script in your
           # package.json, this turns it into a no-op. We’ll run it in the next
           # step because of the caching. If elm-tooling.json changes but
-          # package-lock.json does not, the postinstall script needs running
+          # yarn.lock does not, the postinstall script needs running
           # but this step won’t.
           NO_ELM_TOOLING_INSTALL: 1
         run: yarn install --immutable --immutable-cache --check-cache
 
       # Install tools from elm-tooling.json, unless we restored them from
-      # cache. package-lock.json and elm-tooling.json can change independently,
+      # cache. yarn.lock and elm-tooling.json can change independently,
       # so we need to install separately based on what was restored from cache.
       # This is run even if we restored ~/.elm from cache to be 100% sure
       # node_modules/.bin/ contains links to all your tools. `elm-tooling
@@ -64,10 +64,10 @@ jobs:
         run: npx --no-install elm make src/Main.elm --output=/dev/null
 
       - name: elm-test
-        run: npx --no-install elm-test-rs
+        run: yarn test
 
       - name: elm-review
-        run: npx --no-install elm-review
+        run: yarn review
 
       - name: elm-format
         run: npx --no-install elm-format --validate src tests
