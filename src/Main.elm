@@ -1,4 +1,4 @@
-port module Main exposing (Model, main, update, view)
+port module Main exposing (Model, Msg, main, update, view)
 
 import Browser
 import Date exposing (Date, Unit(..))
@@ -338,14 +338,6 @@ scoreKeyboardChar word guesses char =
                 |> String.toList
                 |> Set.fromList
 
-        hitElsewhereChars : Set Char
-        hitElsewhereChars =
-            scoreGuesses word guesses
-                |> List.concat
-                |> List.filter (\( _, grade ) -> grade == PresentElsewhere)
-                |> List.map Tuple.first
-                |> Set.fromList
-
         hitChars : Set Char
         hitChars =
             -- green
@@ -356,7 +348,15 @@ scoreKeyboardChar word guesses char =
     if Set.member char hitChars then
         Just Hit
 
-    else if Set.member char hitElsewhereChars then
+    else if
+        -- present somewhere else
+        scoreGuesses word guesses
+            |> List.concat
+            |> List.filter (\( _, grade ) -> grade == PresentElsewhere)
+            |> List.map Tuple.first
+            |> Set.fromList
+            |> Set.member char
+    then
         Just PresentElsewhere
 
     else if Set.member char guessedChars then
