@@ -83,7 +83,7 @@ viewWin word guesses =
         Lost ->
             Html.div
                 [ Attrs.class "text-xl text-orange-600" ]
-                [ Html.text "YOU LOST! 😭" ]
+                [ Html.text <| "YOU LOST! 😭 " ++ "The answer was: " ++ word ]
 
         Playing ->
             Html.text ""

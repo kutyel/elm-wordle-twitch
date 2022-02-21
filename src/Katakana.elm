@@ -4,6 +4,7 @@ module Katakana exposing (words)
 words : List String
 words =
     [ "オーバック"
+    , "レストラン"
     , "アーチザン"
     , "アーデント"
     , "アーベント"
