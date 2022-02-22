@@ -117,8 +117,10 @@ viewKey word guesses key =
                 CharKey char ->
                     ( AddChar char
                     , String.fromChar char
-                    , scoreKeyboardChar word guesses char
-                        |> Maybe.map gradeClass
+                    , scoreGuesses word guesses
+                        |> List.concat
+                        |> List.find (Tuple.first >> (==) char)
+                        |> Maybe.map (Tuple.second >> gradeClass)
                     )
 
                 DeleteKey ->
@@ -286,7 +288,6 @@ scoreGuesses word guesses =
     guesses
         |> List.map
             (String.left wordSize
-                >> String.toUpper
                 >> String.toList
                 >> scoreGuess word
             )
@@ -318,52 +319,6 @@ scoreGuess word guessChars =
         )
         wordChars
         guessChars
-
-
-{-| Nothing == not guessed yet, white
--}
-scoreKeyboardChar : String -> List String -> Char -> Maybe Grade
-scoreKeyboardChar word guesses char =
-    let
-        guessedChars : Set Char
-        guessedChars =
-            -- grey unless proven otherwise
-            guesses
-                |> List.concatMap String.toList
-                |> Set.fromList
-
-        correctChars : Set Char
-        correctChars =
-            word
-                |> String.toList
-                |> Set.fromList
-
-        hitChars : Set Char
-        hitChars =
-            -- green
-            Set.intersect
-                guessedChars
-                correctChars
-    in
-    if Set.member char hitChars then
-        Just Hit
-
-    else if
-        -- present somewhere else
-        scoreGuesses word guesses
-            |> List.concat
-            |> List.filter (\( _, grade ) -> grade == PresentElsewhere)
-            |> List.map Tuple.first
-            |> Set.fromList
-            |> Set.member char
-    then
-        Just PresentElsewhere
-
-    else if Set.member char guessedChars then
-        Just Miss
-
-    else
-        Nothing
 
 
 type Grade
@@ -462,30 +417,23 @@ update msg model =
             let
                 stateString : String
                 stateString =
-                    model.guesses
-                        |> List.map
-                            (String.toList
-                                >> List.map (scoreKeyboardChar model.word model.guesses >> gradeToString)
-                                >> String.join ""
-                            )
+                    scoreGuesses model.word model.guesses
+                        |> List.map (List.map (Tuple.second >> gradeToString) >> String.join "")
                         |> String.join "\n"
             in
             ( model, copy <| stateString ++ "\n\n #KatakanaWordle \nhttps://katakana-wordle.netlify.app/" )
 
 
-gradeToString : Maybe Grade -> String
+gradeToString : Grade -> String
 gradeToString grade =
     case grade of
-        Nothing ->
-            "⬜️"
+        Miss ->
+            "⬛️"
 
-        Just Miss ->
-            "⬜️"
-
-        Just PresentElsewhere ->
+        PresentElsewhere ->
             "🟨"
 
-        Just Hit ->
+        Hit ->
             "🟩"
 
 
